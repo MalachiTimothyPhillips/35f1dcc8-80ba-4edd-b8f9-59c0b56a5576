@@ -115,3 +115,32 @@ dfloat phi_rand(dfloat phi, int k)
 
   }
 }
+
+void velocityDirichletConditions(bcData *bc){
+
+  // TODO: these should be passed via kernel args
+  // and populated from the par file in the [CASEDATA] section
+
+  const dfloat a  = -2.1881e+00;
+  const dfloat b  = -2.3757e-01;
+  const dfloat c  = -9.4380e-01;
+
+  const dfloat ea =  9.6238e-01;
+  const dfloat eb =  2.2668e+00;
+  const dfloat ec =  1.5029e+00;
+
+  const dfloat aa =  1.7244e-01;
+  const dfloat bb =  4.9570e-01;
+  const dfloat cc =  1. - (aa+bb);
+
+  const dfloat ys  = p_geomScale*bc->y;          //  scale to multiples of d0
+  const dfloat eta = 1.267186747781574*ys;  //  ys=1 --> delta* = 1
+
+  const dfloat ra = a*(pow(eta,ea));
+  const dfloat rb = b*(pow(eta,eb));
+  const dfloat rc = c*(pow(eta,ec));
+
+  bc->u = 1 - ( aa*exp(ra)+bb*exp(rb)+cc*exp(rc)); // Blasius fit
+  bc->v = 0.0;
+  bc->w = 0.0;
+}
