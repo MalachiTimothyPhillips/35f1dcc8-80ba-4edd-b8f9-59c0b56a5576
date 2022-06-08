@@ -144,3 +144,10 @@ void velocityDirichletConditions(bcData *bc){
   bc->v = 0.0;
   bc->w = 0.0;
 }
+
+void scalarDirichletConditions(bcData *bc){
+  bc->s = 0.0;
+  if(bc->y < 0.001){
+    bc->s = 1.0;
+  }
+}
