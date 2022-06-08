@@ -1,0 +1,117 @@
+#define p_PI M_PI 
+int mod1(int i, int n) {
+  if(!i) return 0;
+  return (i+n-1)%n + 1;
+}
+
+void get_exyz(int* ex, int* ey, int* ez, int eg, int nelx, int nely, int nelz)
+{
+  // eg is 0 indexed, restore to 1 indexing
+  eg++;
+
+  *ex = mod1(eg, nelx);
+  *ey = 1 + (mod1(eg, nelx*nely) - 1)/nelx;
+  *ez = 1 + (eg-1)/(nelx*nely);
+
+  // put back into 0-indexing
+  *ex--;
+  *ey--;
+  *ez--;
+}
+
+dfloat phi_rand(dfloat phi, int k)
+{
+  dfloat plast = phi;
+  dfloat pnew, inew;
+
+  if (plast == 0) plast=1.1;
+
+  pnew = k*k*k*k*plast + 10000*k + 999*k*k + 77*k*k*k + 400/plast;
+  inew = pnew/p_PI;
+  //pnew = p_PI*fmod(inew,2);
+  pnew = fmod(inew,2 * p_PI);
+
+  return pnew;
+}
+
+@kernel void computeHI(const dlong nelz,
+                             const dfloat xmin,
+                             const dfloat xmax,
+                             const dfloat ymin,
+                             const dfloat ymax,
+                             const dfloat zmin,
+                             const dfloat zmax,
+                             @restrict const dfloat * gllz,
+                             @restrict       dfloat * phis,
+                             @restrict       dfloat * HI)
+{
+  for(dlong ez = 0; ez < nelz; ++ez; @outer(0)){
+    const int kmax = zmax * p_geomScale / p_zw;
+    const dfloat dzm = 1.0;
+    const dfloat dz = dzm / nelz;
+    for(int k = 0; k < kmax; ++k){
+      phis[ez] = phi_rand(phis[ez], k);
+      for(dlong j = 0; j < p_Nq; ++j; @inner(0)){
+        const dfloat scale = 2 * p_PI * k * dz;
+        const dfloat zs = ez + 0.5 * (gllz[j] + 1.0);
+        const dfloat arg_span = phis[ez] + scale*zs;
+        HI[j + ez*p_Nq] += sin(arg_span);
+      }
+    }
+  }
+}
+
+@kernel void userf(const dlong N,
+                   const dlong fieldOffset,
+                   const dlong nelx,
+                   const dlong nely,
+                   const dlong nelz,
+                   const dfloat time,
+                   @restrict const dlong * locToGlobE,
+                   @restrict const dfloat * x_coord,
+                   @restrict const dfloat * y_coord,
+                   @restrict const dfloat * z_coord,
+                   @restrict const dfloat * him1,
+                   @restrict const dfloat * hi,
+                   @restrict       dfloat * FU)
+{
+  for(dlong n=0;n<N;++n;@tile(p_blockSize,@outer,@inner)){
+    const dfloat x = p_geomScale * x_coord[n];
+    const dfloat y = p_geomScale * y_coord[n];
+    const dfloat z = p_geomScale * z_coord[n];
+
+    // TODO: should pass as kernel args
+    const dfloat xl = 4.;
+    const dfloat yl = 1.;
+    const dfloat zw = 1.7;
+    const dfloat ts = 4.;
+    const dfloat At = 1.00;
+
+    const dfloat x0 = 10.;
+
+    const dfloat argx = -((x-x0)*(x-x0))/(xl*xl);  // Streamwise
+    const dfloat argy = -(y*y)/(yl*yl);            // Wall normal
+    const dfloat exy  = exp(argx+argy);
+
+    const dfloat gaussxy = At*exy;
+    const int it = int(time / ts);
+    const dfloat s = time / ts - it;
+    const dfloat b = 3.0*s*s-2.0*s*s*s; // Cubic Hermite/Lagrange polynomial
+    const dfloat b1 = 1.0 - b;
+
+    const dlong e = n / p_Np;
+    dlong ex, ey, ez;
+    get_exyz(&ex, &ey, &ez, locToGlobE[e], nelx, nely, nelz);
+
+    const dlong k = (n-e*p_Np) / (p_Nq * p_Nq);
+
+    const dlong id = ez * p_Nq + k;
+
+    const dfloat gt = b1 * him1[id] + b * hi[id];
+
+    FU[0 * fieldOffset + n] = 0.0;
+    FU[1 * fieldOffset + n] = gt * gaussxy;
+    FU[2 * fieldOffset + n] = 0.0;
+
+  }
+}
