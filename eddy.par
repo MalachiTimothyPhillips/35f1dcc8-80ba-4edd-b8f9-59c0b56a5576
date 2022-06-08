@@ -18,3 +18,9 @@ viscosity = 0.05
 [TEMPERATURE]
 boundaryTypeMap = none
 residualTol = 1e-08
+
+[CASEDATA]
+# must match that specified in the box file
+NUMBER_ELEMENTS_X = 30
+NUMBER_ELEMENTS_Y = 3
+NUMBER_ELEMENTS_Z = 5
